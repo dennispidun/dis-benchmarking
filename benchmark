@@ -1,0 +1,22 @@
+#!/bin/bash
+
+curl -s https://packagecloud.io/install/repositories/akopytov/sysbench/script.deb.sh | sudo bash
+sudo apt -y install sysbench
+
+proc_count=$(nproc --all)
+echo "Using $proc_count processors in benmarking"
+
+rm -rf results.csv
+
+for ((z=1; z<60; z++))
+do
+  length=$(($z*60))
+  benchmark=$(sysbench --time=$length --threads=$proc_count cpu run)
+  eps=$(echo "$benchmark" | grep 'events per second:' | awk '{print $4}')
+  min_latency=$(echo "$benchmark" | grep 'min:' | awk '{print $2}')
+  max_latency=$(echo "$benchmark" | grep 'max:' | awk '{print $2}')
+  avg_latency=$(echo "$benchmark" | grep 'avg:' | awk '{print $2}')
+  percentile=$(echo "$benchmark" | grep 'percentile:' | awk '{print $3}')
+
+  echo "$length;$eps;$min_latency;$max_latency;$avg_latency;$percentile" >> results.csv
+done
