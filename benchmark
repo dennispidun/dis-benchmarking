@@ -1,22 +1,46 @@
 #!/bin/bash
 
-curl -s https://packagecloud.io/install/repositories/akopytov/sysbench/script.deb.sh | sudo bash
-sudo apt -y install sysbench
+REQUIRED_PKG="sysbench"
+PKG_OK=$(dpkg-query -W --showformat='${Status}\n' $REQUIRED_PKG|grep "install ok installed")
+echo Checking for $REQUIRED_PKG: $PKG_OK
+if [ "" = "$PKG_OK" ]; then
+  echo "No $REQUIRED_PKG. Setting up $REQUIRED_PKG."
+  curl -s https://packagecloud.io/install/repositories/akopytov/sysbench/script.deb.sh | sudo bash
+  sudo apt -y install sysbench
+fi
+
 
 proc_count=$(nproc --all)
 echo "Using $proc_count processors in benmarking"
 
+touch BENCHMARKING
 rm -rf results.csv
 
-for ((z=1; z<60; z++))
+if [ -f "test_file.0" ]; then
+  echo "Test files already exist"
+else
+  echo "Preparing test files"
+  sysbench --test=fileio --threads=$proc_count --file-total-size=8G prepare 
+fi
+
+for ((z=1; z<=$2; z++))
 do
   length=$(($z*60))
-  benchmark=$(sysbench --time=$length --threads=$proc_count cpu run)
-  eps=$(echo "$benchmark" | grep 'events per second:' | awk '{print $4}')
-  min_latency=$(echo "$benchmark" | grep 'min:' | awk '{print $2}')
-  max_latency=$(echo "$benchmark" | grep 'max:' | awk '{print $2}')
-  avg_latency=$(echo "$benchmark" | grep 'avg:' | awk '{print $2}')
-  percentile=$(echo "$benchmark" | grep 'percentile:' | awk '{print $3}')
+  cpu_benchmark=$(sysbench --time=$length --threads=$proc_count cpu run)
+  io_seq_read_benchmark=$(sysbench --test=fileio --threads=$proc_count --file-total-size=20G --file-test-mode=seqrd --max-time=$length --max-requests=0 run)
+  io_rnd_read_benchmark=$(sysbench --test=fileio --threads=$proc_count --file-total-size=20G --file-test-mode=rndrd --max-time=$length --max-requests=0 run)
 
-  echo "$length;$eps;$min_latency;$max_latency;$avg_latency;$percentile" >> results.csv
+  seq_read_spead=$(echo "$io_seq_read_benchmark" | grep 'read, MiB/s:' | awk '{print $3}')
+  rnd_read_spead=$(echo "$io_rnd_read_benchmark" | grep 'read, MiB/s:' | awk '{print $3}')
+  eps=$(echo "$cpu_benchmark" | grep 'events per second:' | awk '{print $4}')
+  min_latency=$(echo "$cpu_benchmark" | grep 'min:' | awk '{print $2}')
+  max_latency=$(echo "$cpu_benchmark" | grep 'max:' | awk '{print $2}')
+  avg_latency=$(echo "$cpu_benchmark" | grep 'avg:' | awk '{print $2}')
+  percentile=$(echo "$cpu_benchmark" | grep 'percentile:' | awk '{print $3}')
+
+  echo "$1;$length;$proc_count;$eps;$min_latency;$max_latency;$avg_latency;$percentile;$seq_read_spead;$rnd_read_spead" >> results.csv
 done
+
+sysbench --test=fileio --file-total-size=20G cleanup 
+
+rm -rf BENCHMARKING

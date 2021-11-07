@@ -1,4 +1,5 @@
 #!/bin/bash
+
 function scptmp
 {
     scp -o "ConnectTimeout 3" \
@@ -19,7 +20,7 @@ function sshtmp
 
 ips=$(gcloud compute instances list | awk 'NR!=1 {print $5}')
 
-echo "time;eps;min_latency;max_latency;avg_latency;95th_percentile" > results.csv
+echo "type;time;processors;eps;min_latency;max_latency;avg_latency;95th_percentile;seq_read_spead;rnd_read_spead" > results.csv
 
 for ip in $ips
 do
